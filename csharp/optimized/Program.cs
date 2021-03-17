@@ -3,26 +3,30 @@ using System.IO;
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.CompilerServices;
+using System.Text;
 
-var wordCount = new Dictionary<string, StrongBox<int>>(StringComparer.OrdinalIgnoreCase);
+var wordCount = new Dictionary<string, StrongBox<int>>();
 
-using var streamReader = new StreamReader(Console.OpenStandardInput()); // File.OpenText("/home/erik/src/sandbox/countwords/kjvbible_x10.txt"); // Console.OpenStandardInput();
-// using var streamReader = new StreamReader(stream, System.Text.Encoding.UTF8, false, 64 * 1024);
-const int bufferLength = 24 * 1024;
-char[] buffer = new char[bufferLength]; // char[] instead of span to avoid cost while indexing into it in the main loop
+//using var streamReader = File.OpenText("/home/erik/src/sandbox/countwords/kjvbible_x10.txt");
+using var stream = Console.OpenStandardInput();
+using var streamReader = new StreamReader(stream, Encoding.ASCII, false, 64 * 1024);
+
+char[] buffer = new char[64 * 1024];
 string leftover = null;
 var concat = false;
-
-while (streamReader.ReadBlock(buffer) > 0)
+int read;
+while ((read = streamReader.ReadBlock(buffer)) > 0)
 {
-    // prepend leftover if any and new chunk starts with whitespace
     if (leftover != null)
     {
         if (buffer[0] <= ' ')
         {
-            if (!wordCount.TryGetValue(leftover, out var count)) {
+            if (!wordCount.TryGetValue(leftover, out var count))
+            {
                 wordCount.Add(leftover, new StrongBox<int>(1));
-            } else {
+            }
+            else
+            {
                 ++count.Value;
             }
             leftover = null;
@@ -31,9 +35,9 @@ while (streamReader.ReadBlock(buffer) > 0)
     }
 
     int lastPos = 0;
-    for (int index = 0; index <= bufferLength; index++)
+    for (int index = 0; index <= read; index++)
     {
-        var endOfBuffer = index == bufferLength;
+        var endOfBuffer = index == read;
         if (endOfBuffer || buffer[index] <= ' ')
         {
             if (lastPos < index)
@@ -56,23 +60,34 @@ while (streamReader.ReadBlock(buffer) > 0)
                     {
                         word = new String(buffer, lastPos, index - lastPos);
                     }
-                    // TryGetValue takes ~65% of the time
-                    if (!wordCount.TryGetValue(word, out var count)) {
+
+                    if (!wordCount.TryGetValue(word, out var count))
+                    {
                         wordCount.Add(word, new StrongBox<int>(1));
-                    } else {
+                    }
+                    else
+                    {
                         ++count.Value;
                     }
                 }
             }
             lastPos = index + 1;
         }
+        else
+        {
+            buffer[index] = (char) (buffer[index] | 0x20); // lowercase ascii
+        }
     }
 }
 
 // minimal performance impact
 var ordered = wordCount.OrderByDescending(pair => pair.Value.Value);
+var sb = new StringBuilder();
 foreach (var entry in ordered)
 {
-    Console.WriteLine("{0} {1}", entry.Key.ToLower(), entry.Value.Value.ToString());
+    sb.Append(entry.Key).Append(' ').AppendLine(entry.Value.Value.ToString());
 }
+
+sb.Length--; // remove last new line (what about \r\n?)
+Console.WriteLine(sb.ToString());
 
